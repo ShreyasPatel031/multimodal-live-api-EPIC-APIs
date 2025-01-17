@@ -5,6 +5,7 @@ import vegaEmbed from "vega-embed";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { ToolCall } from "../../multimodal-live-types";
 
+import image from "../../assets/image.png"
 
 
 const declaration: FunctionDeclaration = {
@@ -353,6 +354,7 @@ function AltairComponent() {
 
   return (
     <div>
+       <img src={image} alt="My Image" />
     </div>
   );
 }
