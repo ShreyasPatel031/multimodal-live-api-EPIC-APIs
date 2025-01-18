@@ -1,10 +1,12 @@
+
 import { type FunctionDeclaration, SchemaType } from "@google/generative-ai";
 import { useEffect, useRef, useState, memo } from "react";
 import vegaEmbed from "vega-embed";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { ToolCall } from "../../multimodal-live-types";
 
-// Existing Altair graph declaration
+
+
 const declaration: FunctionDeclaration = {
   name: "render_altair",
   description: "Displays an altair graph in json format.",
@@ -21,10 +23,11 @@ const declaration: FunctionDeclaration = {
   },
 };
 
-// Existing Epic Patient creation declaration
+
 const createEpicPatientDeclaration: FunctionDeclaration = {
   name: "create_epic_patient",
-  description: "Creates a patient in Epic systems EHR",
+  description:
+    "Creates a patient in Epic systems EHR",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -50,14 +53,14 @@ const createEpicPatientDeclaration: FunctionDeclaration = {
         description: "Patient's birth date (YYYY-MM-DD) if needed",
       },
     },
-    required: ["givenName", "familyName", "telecom", "gender"],
+    required: [ "givenName", "familyName", "telecom", "gender"],
   },
 };
 
-// Existing Epic Patient search declaration
+
 const searchEpicPatientDeclaration: FunctionDeclaration = {
   name: "search_epic_patient",
-  description: "Searches for patients in Epic systems EHR based on givenName,familyName,birthDate and confirm by asking them their phone number and gender",
+  description: "Searches for patients in Epic systems EHR based on demographics.",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -75,62 +78,15 @@ const searchEpicPatientDeclaration: FunctionDeclaration = {
       },
       gender: {
         type: SchemaType.STRING,
-        description:
-          "legal sex or FHIR 'gender' parameter (male, female, other, unknown)",
+        description: "legal sex or FHIR 'gender' parameter (male, female, other, unknown)",
         enum: ["male", "female", "other", "unknown"],
       },
       telecom: {
         type: SchemaType.STRING,
-        description: "Patient's phone number",
-      },
-    },
-    required: ["givenName","familyName","birthDate"],
-  },
-};
-
-// Updated tool: static doctor time slots declaration (search by name)
-const doctorTimeSlotsDeclaration: FunctionDeclaration = {
-  name: "get_doctor_time_slots",
-  description:
-    "Retrieves static doctor time slots available for appointments. If a doctorName is provided, only that doctor's slots are returned; otherwise, slots for all doctors are returned.",
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      doctorName: {
-        type: SchemaType.STRING,
-        description: "Name of the doctor (optional)",
+        description: "Patient's phone number match on",
       },
     },
     required: [],
-  },
-};
-
-const bookAppointmentDeclaration: FunctionDeclaration = {
-  name: "book_appointment",
-  description:
-    "Books an appointment for a patient with a doctor at a given day and time. Returns a success response.",
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      doctorId: {
-        type: SchemaType.STRING,
-        description: "Unique identifier for the doctor",
-      },
-      day: {
-        type: SchemaType.STRING,
-        description:
-          "Day of the week for the appointment (e.g., Mon, Tue, Wed...)",
-      },
-      time: {
-        type: SchemaType.STRING,
-        description: "Time of the appointment (e.g., 09:00)",
-      },
-      patientName: {
-        type: SchemaType.STRING,
-        description: "Name of the patient booking the appointment",
-      },
-    },
-    required: ["doctorId", "day", "time", "patientName"],
   },
 };
 
@@ -150,33 +106,29 @@ function AltairComponent() {
       systemInstruction: {
         parts: [
           {
-            text: 'You are a front office agent to help book appointment slots. You need to be friendly and conersational and introduce yourself when you start talking. Check to see if a patient is present in records ( Searches for patients in Epic systems EHR based on givenName,familyName,birthDate) if they are present confirm their identity by asking them their phone number and gender. If not present create a new patient record. After that ask them if they have a preference for doctors and check for availaible time slots. If time slots availaible book an appointment and thank them and tell them to have a great day.  ',
+            text: 'System Instruction, Patient.Search requests require one of the following minimum data sets by default in order to match and return a patient record: FHIR ID; SSN; ID with or without an ID Type; Given name, family name, and birthdate; or Given name, family name, legal sex, and phone number/email',
           },
         ],
       },
       tools: [
         // there is a free-tier quota for search
         { googleSearch: {} },
-        {
-          functionDeclarations: [
-            declaration,
-            createEpicPatientDeclaration,
-            searchEpicPatientDeclaration,
-            doctorTimeSlotsDeclaration,
-            bookAppointmentDeclaration,
-          ],
-        },
+        { functionDeclarations: [
+          declaration,
+          createEpicPatientDeclaration,
+          searchEpicPatientDeclaration,
+        ] },
       ],
     });
   }, [setConfig]);
 
   useEffect(() => {
     const onToolCall = async (toolCall: ToolCall) => {
-      console.log("got toolcall", toolCall);
-
+      console.log(`got toolcall`, toolCall);
+      
       // Handle Altair graph rendering
       const altairCall = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name
+        (fc) => fc.name === declaration.name,
       );
       if (altairCall) {
         const str = (altairCall.args as any).json_graph;
@@ -187,9 +139,17 @@ function AltairComponent() {
         (fc) => fc.name === createEpicPatientDeclaration.name
       );
       if (createPatientCall) {
-        const { givenName, familyName, telecom, gender, birthDate } =
-          createPatientCall.args as any;
+        // Pull dynamic args from the function call
+        const {
+          givenName,
+          familyName,
+          telecom,
+          gender,
+          birthDate,
+        } = createPatientCall.args as any;
 
+        // Build the Patient resource from user arguments; 
+        // keep identifier = "000-00-0000" or use the passed identifier if you prefer
         const patientBody = {
           resourceType: "Patient",
           identifier: [
@@ -222,10 +182,13 @@ function AltairComponent() {
           extension: [],
         };
 
+        // Epic endpoint
         const epicUrl =
           "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient";
 
         try {
+        //   // 1) ***** GET THE TOKEN FROM server.js *****
+        //   //    (uncomment below lines to use server-based token approach)
           const tokenResponse = await fetch("http://localhost:8080/getToken");
           if (!tokenResponse.ok) {
             throw new Error(`Token fetch error: ${await tokenResponse.text()}`);
@@ -233,95 +196,113 @@ function AltairComponent() {
           const tokenData = await tokenResponse.json();
           const token = tokenData.access_token;
 
-          const resp = await fetch(epicUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/fhir+json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(patientBody),
-          });
+        // Bearer token
+        // const token ="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ1cm46b2lkOjEuMi44NDAuMTE0MzUwLjEuMTMuMC4xLjcuMy42ODg4ODQuMTAwIiwiY2xpZW50X2lkIjoiZDlmMDdiZTYtMjhjZC00NjlhLWIyYzEtYzY1OTVjYzgxOTAxIiwiZXBpYy5lY2kiOiJ1cm46ZXBpYzpPcGVuLkVwaWMtY3VycmVudCIsImVwaWMubWV0YWRhdGEiOiJJaW94bFVUcUk4RWs3NGY3UkZwcjFSRFFoVjhKNGJzY2JRbjZVQWhRUmZNOTJQYXJYVGZyaW9Ia0lkTXo2R1gyUzVWU1E5NklYYmczR01tLUFnWXBUM1dzMjFVemFjMllBbUZ4cjJpaEFRdzVDQ2N3ZFF4MkYzVUtjdmJjZW1FdCIsImVwaWMudG9rZW50eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzM2NzczNjEwLCJpYXQiOjE3MzY3NzAwMTAsImlzcyI6InVybjpvaWQ6MS4yLjg0MC4xMTQzNTAuMS4xMy4wLjEuNy4zLjY4ODg4NC4xMDAiLCJqdGkiOiI5MWEyODhiMC02MDc5LTRlNzAtOTMwNy0zZTI5NzRmNmRjZTAiLCJuYmYiOjE3MzY3NzAwMTAsInN1YiI6ImV2TnAtS2hZd09PcUFabjFwWjJlbnVBMyJ9.ROL7-dAa6C9mSNK-QkfOQE8i4BbJSS1TokQFiW7oZZ-4Ng6LAaQMERHyxdynCwopaA2k9kiRV8SwTv3izL0MEMighivNPRF-Mo1KiLAz3T2U_qrlsfn6n_zZlnnqlKb1_jSGgMyeaSRApiez_Iq_1IN4JddSxaKQW8i7tx4UgxI2PzCbNSE84nZSmhpY3wVtUEDmssdHZrpwv9FXrganGGSqZipHrPO1XbJNjIjPaD0wDkKkzdt8tRw7Rmrg3y4RZoMLG6gIHc-aarSRgdOXl143fKeYUTsm5A3Chr8WzNcSBpTRbiLxUhLyKLHp8AyO-010ZpF3iLQwfRzdOO8vng";
 
-          console.log("Epic Patient.Create status code:", resp.status);
-          console.log("Epic Patient.Create status text:", resp.statusText);
+        const resp = await fetch(epicUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/fhir+json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(patientBody),
+        });
 
-          resp.headers.forEach((value, name) => {
-            console.log(`${name}: ${value}`);
-          });
+        console.log("Epic Patient.Create status code:", resp.status);
+        console.log("Epic Patient.Create status text:", resp.statusText);
 
-          if (resp.status === 201) {
-            console.log("Epic indicates 'Created' – check headers for location!");
-          }
+        resp.headers.forEach((value, name) => {
+          console.log(`${name}: ${value}`);
+        });
 
-          let data = null;
-          try {
-            data = await resp.json();
-          } catch (err) {
-            console.warn("No JSON body or parse error:", err);
-          }
-          console.log("Epic Patient.Create response data:", data);
-
-          // Return data to Gemini
-          client.sendToolResponse({
-            functionResponses: [
-              {
-                response: { output: { success: resp.ok, data } },
-                id: createPatientCall.id,
-              },
-            ],
-          });
-        } catch (error: any) {
-          console.error("Epic Patient.Create error:", error.message);
-          client.sendToolResponse({
-            functionResponses: [
-              {
-                response: { output: { success: false, error: error.message } },
-                id: createPatientCall.id,
-              },
-            ],
-          });
+        if (resp.status === 201) {
+          console.log("Epic indicates 'Created' – check headers for location!");
         }
+
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (err) {
+          console.warn("No JSON body or parse error:", err);
+        }
+        console.log("Epic Patient.Create response data:", data);
+
+        // Return data to Gemini
+        client.sendToolResponse({
+          functionResponses: [
+            {
+              response: { output: { success: resp.ok, data } },
+              id: createPatientCall.id,
+            },
+          ],
+        });
+      } catch (error: any) {
+        console.error("Epic Patient.Create error:", error.message);
+        client.sendToolResponse({
+          functionResponses: [
+            {
+              response: { output: { success: false, error: error.message } },
+              id: createPatientCall.id,
+            },
+          ],
+        });
+      }
       }
 
       const searchPatientCall = toolCall.functionCalls.find(
         (fc) => fc.name === searchEpicPatientDeclaration.name
       );
       if (searchPatientCall) {
-        const { givenName, familyName, birthDate, gender, telecom } =
-          searchPatientCall.args as any;
-
+        const {
+          givenName,
+          familyName,
+          birthDate,
+          gender,
+          telecom,
+        } = searchPatientCall.args as any;
+  
+        // 2) Build a query string
+        // e.g. /Patient?given=...&family=...&birthdate=...&gender=...&telecom=...
         const searchParams = new URLSearchParams();
         if (givenName) searchParams.set("given", givenName);
         if (familyName) searchParams.set("family", familyName);
         if (birthDate) searchParams.set("birthdate", birthDate);
         if (gender) searchParams.set("gender", gender);
         if (telecom) searchParams.set("telecom", telecom);
-
+  
+        // The base endpoint for searching
         const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient?${searchParams.toString()}`;
-
+  
         try {
+          // 3) Retrieve an OAuth token from server.js (or use hardcoded if needed)
+          
           const tokenResponse = await fetch("http://localhost:8080/getToken");
           if (!tokenResponse.ok) {
             throw new Error(`Token fetch error: ${await tokenResponse.text()}`);
           }
           const tokenData = await tokenResponse.json();
           const token = tokenData.access_token;
-
+          
+  
+          // or HARDCODED token again
+          // const token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJh...";
+  
+          // 4) Call Epic’s GET /Patient
           const resp = await fetch(epicSearchUrl, {
             method: "GET",
             headers: {
-              Accept: "application/fhir+json",
+              "Accept": "application/fhir+json",
               Authorization: `Bearer ${token}`,
             },
           });
-
+  
           console.log("Epic Patient.Search status code:", resp.status);
           console.log("Epic Patient.Search status text:", resp.statusText);
-
+  
           resp.headers.forEach((value, name) => {
             console.log(`${name}: ${value}`);
           });
-
+  
           let data = null;
           try {
             data = await resp.json();
@@ -329,7 +310,8 @@ function AltairComponent() {
             console.warn("No JSON body or parse error:", err);
           }
           console.log("Epic Patient.Search response data:", data);
-
+  
+          // 5) Return data to Gemini or wherever
           client.sendToolResponse({
             functionResponses: [
               {
@@ -343,174 +325,16 @@ function AltairComponent() {
           client.sendToolResponse({
             functionResponses: [
               {
-                response: {
-                  output: { success: false, error: error.message },
-                },
+                response: { output: { success: false, error: error.message } },
                 id: searchPatientCall.id,
               },
             ],
           });
         }
       }
+  };
 
-      // Handle doctor time slots request using doctorName for filtering
-      const doctorSlotCall = toolCall.functionCalls.find(
-        (fc) => fc.name === doctorTimeSlotsDeclaration.name
-      );
-      if (doctorSlotCall) {
-        const { doctorName } = doctorSlotCall.args as any;
-
-        // Define static time slots for two example doctors
-        const doctors = [
-          {
-            id: "doc1",
-            name: "Dr. Alice Smith",
-            timeSlots: {
-              Mon: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Tue: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Wed: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Thu: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Fri: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-            },
-          },
-          {
-            id: "doc2",
-            name: "Dr. Bob Johnson",
-            timeSlots: {
-              Mon: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Tue: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Wed: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Thu: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Fri: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-            },
-          },
-        ];
-
-        // If a doctorName is provided, filter based on a case-insensitive check
-        const result = doctorName
-          ? doctors.filter((doc) =>
-              doc.name.toLowerCase().includes(doctorName.toLowerCase())
-            )
-          : doctors;
-
-        // Return the static doctor time slots
-        client.sendToolResponse({
-          functionResponses: [
-            {
-              response: { output: { success: true, data: result } },
-              id: doctorSlotCall.id,
-            },
-          ],
-        });
-      }
-
-      // Handle appointment booking tool call
-      const bookAppointmentCall = toolCall.functionCalls.find(
-        (fc) => fc.name === bookAppointmentDeclaration.name
-      );
-      if (bookAppointmentCall) {
-        const { doctorId, day, time, patientName } =
-          bookAppointmentCall.args as any;
-
-        // In an actual booking system, you would process the appointment here.
-        // This example simply returns a dummy success response.
-
-        const appointmentResponse = {
-          success: true,
-          appointmentId: "apt-12345", // dummy appointment ID
-          message: `Appointment booked for ${patientName} with doctor ${doctorId} on ${day} at ${time}.`,
-        };
-
-        client.sendToolResponse({
-          functionResponses: [
-            {
-              response: { output: appointmentResponse },
-              id: bookAppointmentCall.id,
-            },
-          ],
-        });
-      }
-    };
+    
 
     client.on("toolcall", onToolCall);
     return () => {
@@ -526,7 +350,11 @@ function AltairComponent() {
     }
   }, [embedRef, jsonString]);
 
-  return <div ref={embedRef}></div>;
+
+  return (
+    <div>
+    </div>
+  );
 }
 
 export const Altair = memo(AltairComponent);
