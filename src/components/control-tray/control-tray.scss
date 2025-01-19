@@ -18,13 +18,13 @@
   cursor: pointer;
 
   &:focus {
-    border: 2px solid var(--Neutral-20);
-    outline: 2px solid var(--Neutral-80);
+    border: 2px solid var(--Neutral-90);
+    outline: 2px solid var(--Neutral-100);
   }
 
   &.outlined {
-    background: var(--Neutral-2);
-    border: 1px solid var(--Neutral-20);
+    background: var(white);
+    border: 1px solid var(white);
   }
 
   .no-action {
@@ -33,12 +33,12 @@
 
   &:hover {
     background: rgba(0, 0, 0, 0);
-    border: 1px solid var(--Neutral-20);
+    border: 3px solid var(white);
   }
 
   &.connected {
-    background: var(--Blue-800);
-    color: var(--Blue-500);
+    background: white;
+    color: #2962f6;
 
     &:hover {
       border: 1px solid var(--Blue-500);
@@ -93,13 +93,13 @@
 
 .connect-toggle {
   &:focus {
-    border: 2px solid var(--Neutral-20);
-    outline: 2px solid var(--Neutral-80);
+    border: 2px solid var(white);
+    outline: 2px solid var(white);
   }
 
   &:not(.connected) {
-    background-color: var(--Blue-500);
-    color: var(--Neutral-5);
+    background-color: #2962f6;
+    color: #ffffff;
   }
 }
 
@@ -113,6 +113,7 @@
   align-items: flex-start;
   gap: 8px;
   padding-bottom: 18px;
+  
 
   .disabled .action-button,
   .action-button.disabled {
@@ -127,11 +128,12 @@
     justify-content: center;
     align-items: center;
     gap: 4px;
+    
 
     .connection-button-container {
       border-radius: 27px;
-      border: 1px solid var(--Neutral-30);
-      background: var(--Neutral-5);
+      border: 2px solid var(--Neutral-30);
+      background: var(white);
       padding: 10px;
     }
 
@@ -151,7 +153,7 @@
 
 .actions-nav {
   background: var(--Neutral-5);
-  border: 1px solid var(--Neutral-30);
+  border: 3x solid var(--Neutral-30);
   border-radius: 27px;
   display: inline-flex;
   gap: 12px;
