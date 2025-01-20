@@ -52,7 +52,7 @@ const createEpicPatientDeclaration: FunctionDeclaration = {
         description: "Patient's birth date (YYYY-MM-DD) if needed",
       },
     },
-    required: ["givenName", "familyName", "telecom", "gender"],
+    required: ["givenName", "familyName", "telecom", "gender","birthDate"],
   },
 };
 
@@ -228,7 +228,7 @@ function AltairComponent() {
           "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient";
 
         try {
-          const tokenResponse = await fetch("http://localhost:8080/getToken");
+          const tokenResponse = await fetch("/getToken");
           if (!tokenResponse.ok) {
             throw new Error(`Token fetch error: ${await tokenResponse.text()}`);
           }
@@ -302,7 +302,7 @@ function AltairComponent() {
         const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient?${searchParams.toString()}`;
 
         try {
-          const tokenResponse = await fetch("http://localhost:8080/getToken");
+          const tokenResponse = await fetch("/getToken");
           if (!tokenResponse.ok) {
             throw new Error(`Token fetch error: ${await tokenResponse.text()}`);
           }

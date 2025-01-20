@@ -1,6 +1,7 @@
 {
   "name": "multimodal-live-api-web-console",
   "version": "0.1.0",
+  "type": "module",
   "dependencies": {
     "assert": "^2.1.0",
     "bn.js": "^5.2.1",
@@ -41,7 +42,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "server": "node server.js"
   },
   "eslintConfig": {
     "extends": [
