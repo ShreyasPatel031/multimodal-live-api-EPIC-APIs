@@ -3,25 +3,8 @@ import { useEffect, useRef, useState, memo } from "react";
 import vegaEmbed from "vega-embed";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { ToolCall } from "../../multimodal-live-types";
-import searcelogo from '../../assets/images/searce-logo.png';
-import heartlogo from '../../assets/images/heart-logo.png';
-
-// Existing Altair graph declaration
-const declaration: FunctionDeclaration = {
-  name: "render_altair",
-  description: "Displays an altair graph in json format.",
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      json_graph: {
-        type: SchemaType.STRING,
-        description:
-          "JSON STRING representation of the graph to render. Must be a string, not a json object",
-      },
-    },
-    required: ["json_graph"],
-  },
-};
+import searcelogo from "../../assets/images/searce-logo.png";
+import heartlogo from "../../assets/images/heart-logo.png";
 
 // Existing Epic Patient creation declaration
 const createEpicPatientDeclaration: FunctionDeclaration = {
@@ -90,54 +73,112 @@ const searchEpicPatientDeclaration: FunctionDeclaration = {
   },
 };
 
-// Updated tool: static doctor time slots declaration (search by name)
-const doctorTimeSlotsDeclaration: FunctionDeclaration = {
-  name: "get_doctor_time_slots",
+// Example: Search MedicationRequest
+const searchEpicMedicationRequestDeclaration: FunctionDeclaration = {
+  name: "search_epic_medication_request",
   description:
-    "Retrieves static doctor time slots available for appointments. If a doctorName is provided, only that doctor's slots are returned; otherwise, slots for all doctors are returned.",
+    "Searches for MedicationRequest resources in Epic for a given patient.",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      doctorName: {
+      patientId: {
         type: SchemaType.STRING,
-        description: "Name of the doctor (optional)",
+        description: "The FHIR ID of the patient to retrieve MedicationRequests for.",
       },
     },
-    required: [],
+    required: ["patientId"],
   },
 };
 
-const bookAppointmentDeclaration: FunctionDeclaration = {
-  name: "book_appointment",
+// Example: Search DiagnosticReport
+const searchEpicDiagnosticReportDeclaration: FunctionDeclaration = {
+  name: "search_epic_diagnostic_report",
   description:
-    "Books an appointment for a patient with a doctor at a given day and time. Returns a success response.",
+    "Searches for DiagnosticReport resources in Epic for a given patient.",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      doctorId: {
+      patientId: {
         type: SchemaType.STRING,
-        description: "Unique identifier for the doctor",
-      },
-      day: {
-        type: SchemaType.STRING,
-        description:
-          "Day of the week for the appointment (e.g., Mon, Tue, Wed...)",
-      },
-      time: {
-        type: SchemaType.STRING,
-        description: "Time of the appointment (e.g., 09:00)",
-      },
-      patientName: {
-        type: SchemaType.STRING,
-        description: "Name of the patient booking the appointment",
+        description: "The FHIR ID of the patient to retrieve DiagnosticReports for.",
       },
     },
-    required: ["doctorId", "day", "time", "patientName"],
+    required: ["patientId"],
+  },
+};
+
+// Example: Search Procedure
+const searchEpicProcedureDeclaration: FunctionDeclaration = {
+  name: "search_epic_procedure",
+  description:
+    "Searches for Procedure resources in Epic for a given patient.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "The FHIR ID of the patient to retrieve Procedures for.",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+// Example: Search MedicationStatement
+const searchEpicMedicationStatementDeclaration: FunctionDeclaration = {
+  name: "search_epic_medication_statement",
+  description:
+    "Searches for MedicationStatement resources in Epic for a given patient.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "The FHIR ID of the patient to retrieve MedicationStatements for.",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+// Example: Search Goal
+const searchEpicGoalDeclaration: FunctionDeclaration = {
+  name: "search_epic_goal",
+  description: "Searches for Goal resources in Epic for a given patient.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "The FHIR ID of the patient to retrieve Goals for.",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+// Example: Search Observation (Labs)
+const searchEpicObservationDeclaration: FunctionDeclaration = {
+  name: "search_epic_observation",
+  description:
+    "Searches for Observation resources in Epic for a given patient (e.g., labs).",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "The FHIR ID of the patient to retrieve Observations for.",
+      },
+    },
+    required: ["patientId"],
   },
 };
 
 function AltairComponent() {
+  // All Hooks must be inside the component function:
   const [jsonString, setJSONString] = useState<string>("");
+  const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
+
   const { client, setConfig } = useLiveAPIContext();
 
   useEffect(() => {
@@ -152,20 +193,22 @@ function AltairComponent() {
       systemInstruction: {
         parts: [
           {
-            text: 'System Instruction: you are a friendly, conversational and helpful assistant that can help with patient care and support. Always start with an introduction and explain that you can help them schedule an appointment with a doctor. Start with checking if they are an existing patient with the hospital. Ask for first name, last name and dob to check and use search_epic_patient tool to check if they exist in the database ( only if it returns a record then confirm their identity by asking them their phone and gender) then ask them if they would like to schedule an appointment.  If they do not exist in the database, tell them that youre going to need more information to create a new patient record. For scheduling an appointment ask them if they have a preferred doctor and if they have a preferred time. If they do not have a preferred doctor, ask them if they would like to see a list of doctors. If they do not have a preferred time, ask them if they would like to see a list of times. Once they find a time and doctor send them a confirmation message and thank them for using your service.',
+            text: 'System Instruction: you call tools',
           },
         ],
       },
       tools: [
-        // there is a free-tier quota for search
         { googleSearch: {} },
         {
           functionDeclarations: [
-            declaration,
             createEpicPatientDeclaration,
             searchEpicPatientDeclaration,
-            doctorTimeSlotsDeclaration, // Updated doctor time slots tool
-            bookAppointmentDeclaration,
+            searchEpicMedicationRequestDeclaration,
+            searchEpicDiagnosticReportDeclaration,
+            searchEpicProcedureDeclaration,
+            searchEpicMedicationStatementDeclaration,
+            searchEpicGoalDeclaration,
+            searchEpicObservationDeclaration,
           ],
         },
       ],
@@ -175,15 +218,6 @@ function AltairComponent() {
   useEffect(() => {
     const onToolCall = async (toolCall: ToolCall) => {
       console.log("got toolcall", toolCall);
-
-      // Handle Altair graph rendering
-      const altairCall = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name
-      );
-      if (altairCall) {
-        const str = (altairCall.args as any).json_graph;
-        setJSONString(str);
-      }
 
       const createPatientCall = toolCall.functionCalls.find(
         (fc) => fc.name === createEpicPatientDeclaration.name
@@ -277,7 +311,9 @@ function AltairComponent() {
           client.sendToolResponse({
             functionResponses: [
               {
-                response: { output: { success: false, error: error.message } },
+                response: {
+                  output: { success: false, error: error.message },
+                },
                 id: createPatientCall.id,
               },
             ],
@@ -292,6 +328,7 @@ function AltairComponent() {
         const { givenName, familyName, birthDate, gender, telecom } =
           searchPatientCall.args as any;
 
+        // Build query with user-provided parameters
         const searchParams = new URLSearchParams();
         if (givenName) searchParams.set("given", givenName);
         if (familyName) searchParams.set("family", familyName);
@@ -317,21 +354,28 @@ function AltairComponent() {
             },
           });
 
-          console.log("Epic Patient.Search status code:", resp.status);
-          console.log("Epic Patient.Search status text:", resp.statusText);
-
-          resp.headers.forEach((value, name) => {
-            console.log(`${name}: ${value}`);
-          });
-
           let data = null;
           try {
             data = await resp.json();
           } catch (err) {
             console.warn("No JSON body or parse error:", err);
           }
-          console.log("Epic Patient.Search response data:", data);
 
+          if (
+            resp.ok &&
+            data &&
+            data.resourceType === "Bundle" &&
+            data.entry?.length > 0
+          ) {
+            // We found at least one matching patient
+            const foundPatient = data.entry[0].resource;
+            if (foundPatient.id) {
+              // Save the ID in state so we can reuse it for future queries
+              setCurrentPatientId(foundPatient.id);
+            }
+          }
+
+          // Return data (success or not) to the agent
           client.sendToolResponse({
             functionResponses: [
               {
@@ -341,13 +385,10 @@ function AltairComponent() {
             ],
           });
         } catch (error: any) {
-          console.error("Epic Patient.Search error:", error.message);
           client.sendToolResponse({
             functionResponses: [
               {
-                response: {
-                  output: { success: false, error: error.message },
-                },
+                response: { output: { success: false, error: error.message } },
                 id: searchPatientCall.id,
               },
             ],
@@ -355,162 +396,449 @@ function AltairComponent() {
         }
       }
 
-      // Handle doctor time slots request using doctorName for filtering
-      const doctorSlotCall = toolCall.functionCalls.find(
-        (fc) => fc.name === doctorTimeSlotsDeclaration.name
+      // 1) Handle MedicationRequest search
+      const medRequestCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicMedicationRequestDeclaration.name
       );
-      if (doctorSlotCall) {
-        const { doctorName } = doctorSlotCall.args as any;
+      if (medRequestCall) {
+        let { patientId } = medRequestCall.args as any;
+        if (!patientId && currentPatientId) {
+          // fallback to stored context
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          // No ID? Return an error
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: medRequestCall.id,
+              },
+            ],
+          });
+        } else {
+          // e.g. GET /MedicationRequest?patient={patientId}
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/MedicationRequest?patient=${patientId}`;
 
-        // Define static time slots for two example doctors
-        const doctors = [
-          {
-            id: "doc1",
-            name: "Dr. Alice Smith",
-            timeSlots: {
-              Mon: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Tue: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Wed: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Thu: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Fri: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-            },
-          },
-          {
-            id: "doc2",
-            name: "Dr. Bob Johnson",
-            timeSlots: {
-              Mon: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Tue: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Wed: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Thu: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Fri: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-            },
-          },
-        ];
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
 
-        // If a doctorName is provided, filter based on a case-insensitive check
-        const result = doctorName
-          ? doctors.filter((doc) =>
-              doc.name.toLowerCase().includes(doctorName.toLowerCase())
-            )
-          : doctors;
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("MedicationRequest search status code:", resp.status);
 
-        // Return the static doctor time slots
-        client.sendToolResponse({
-          functionResponses: [
-            {
-              response: { output: { success: true, data: result } },
-              id: doctorSlotCall.id,
-            },
-          ],
-        });
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
+
+            // Return the data
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: medRequestCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: {
+                    output: { success: false, error: error.message },
+                  },
+                  id: medRequestCall.id,
+                },
+              ],
+            });
+          }
+        }
       }
 
-      // Handle appointment booking tool call
-      const bookAppointmentCall = toolCall.functionCalls.find(
-        (fc) => fc.name === bookAppointmentDeclaration.name
+      // 2) DiagnosticReport search
+      const diagReportCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicDiagnosticReportDeclaration.name
       );
-      if (bookAppointmentCall) {
-        const { doctorId, day, time, patientName } =
-          bookAppointmentCall.args as any;
+      if (diagReportCall) {
+        let { patientId } = diagReportCall.args as any;
+        if (!patientId && currentPatientId) {
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: diagReportCall.id,
+              },
+            ],
+          });
+        } else {
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/DiagnosticReport?patient=${patientId}`;
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
 
-        // In an actual booking system, you would process the appointment here.
-        // This example simply returns a dummy success response.
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("DiagnosticReport search status code:", resp.status);
 
-        const appointmentResponse = {
-          success: true,
-          appointmentId: "apt-12345", // dummy appointment ID
-          message: `Appointment booked for ${patientName} with doctor ${doctorId} on ${day} at ${time}.`,
-        };
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
 
-        client.sendToolResponse({
-          functionResponses: [
-            {
-              response: { output: appointmentResponse },
-              id: bookAppointmentCall.id,
-            },
-          ],
-        });
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: diagReportCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: false, error: error.message } },
+                  id: diagReportCall.id,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      // 3) Procedure
+      const procedureCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicProcedureDeclaration.name
+      );
+      if (procedureCall) {
+        let { patientId } = procedureCall.args as any;
+        if (!patientId && currentPatientId) {
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: procedureCall.id,
+              },
+            ],
+          });
+        } else {
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Procedure?patient=${patientId}`;
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
+
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("Procedure search status code:", resp.status);
+
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
+
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: procedureCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: false, error: error.message } },
+                  id: procedureCall.id,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      // 4) MedicationStatement
+      const medStatementCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicMedicationStatementDeclaration.name
+      );
+      if (medStatementCall) {
+        let { patientId } = medStatementCall.args as any;
+        if (!patientId && currentPatientId) {
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: medStatementCall.id,
+              },
+            ],
+          });
+        } else {
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/MedicationStatement?patient=${patientId}`;
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
+
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("MedicationStatement search code:", resp.status);
+
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
+
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: medStatementCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: false, error: error.message } },
+                  id: medStatementCall.id,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      // 5) Goal
+      const goalCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicGoalDeclaration.name
+      );
+      if (goalCall) {
+        let { patientId } = goalCall.args as any;
+        if (!patientId && currentPatientId) {
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: goalCall.id,
+              },
+            ],
+          });
+        } else {
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Goal?patient=${patientId}`;
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
+
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("Goal search status code:", resp.status);
+
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
+
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: goalCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: false, error: error.message } },
+                  id: goalCall.id,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      // 6) Observation (labs)
+      const obsCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicObservationDeclaration.name
+      );
+      if (obsCall) {
+        let { patientId } = obsCall.args as any;
+        if (!patientId && currentPatientId) {
+          patientId = currentPatientId;
+        }
+        if (!patientId) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: {
+                  output: {
+                    success: false,
+                    error:
+                      "No patient ID provided or found in context. Please search a patient first.",
+                  },
+                },
+                id: obsCall.id,
+              },
+            ],
+          });
+        } else {
+          const epicSearchUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Observation?patient=${patientId}`;
+          try {
+            const tokenResponse = await fetch("http://localhost:8080/getToken");
+            if (!tokenResponse.ok) {
+              throw new Error(
+                `Token fetch error: ${await tokenResponse.text()}`
+              );
+            }
+            const tokenData = await tokenResponse.json();
+            const token = tokenData.access_token;
+
+            const resp = await fetch(epicSearchUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/fhir+json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            console.log("Observation search status code:", resp.status);
+
+            let data = null;
+            try {
+              data = await resp.json();
+            } catch (err) {
+              console.warn("No JSON body or parse error:", err);
+            }
+
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: resp.ok, data } },
+                  id: obsCall.id,
+                },
+              ],
+            });
+          } catch (error: any) {
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { output: { success: false, error: error.message } },
+                  id: obsCall.id,
+                },
+              ],
+            });
+          }
+        }
       }
     };
 
@@ -518,7 +846,7 @@ function AltairComponent() {
     return () => {
       client.off("toolcall", onToolCall);
     };
-  }, [client]);
+  }, [client, currentPatientId]);
 
   const embedRef = useRef<HTMLDivElement>(null);
 
@@ -529,24 +857,13 @@ function AltairComponent() {
   }, [embedRef, jsonString]);
 
   return (
-    <div 
-      ref={embedRef} 
-    >
+    <div ref={embedRef}>
       {!jsonString && (
         <div className="logo-container">
-          <img 
-            src={searcelogo}
-            alt="Searce Logo"
-          />
+          <img src={searcelogo} alt="Searce Logo" />
           <div className="text-container">
-            <img 
-              src={heartlogo}
-              alt="Heart"
-              className="heart-logo"
-            />
-            <div className="logo-text">
-              Care Companion
-            </div>
+            <img src={heartlogo} alt="Heart" className="heart-logo" />
+            <div className="logo-text">Care Companion</div>
           </div>
         </div>
       )}
@@ -555,4 +872,3 @@ function AltairComponent() {
 }
 
 export const Altair = memo(AltairComponent);
-
