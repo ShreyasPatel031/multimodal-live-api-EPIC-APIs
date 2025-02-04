@@ -1,27 +1,12 @@
-import { type FunctionDeclaration, SchemaType } from "@google/generative-ai";
+import { FunctionDeclaration, SchemaType } from "@google/generative-ai";
 import { useEffect, useRef, useState, memo } from "react";
 import vegaEmbed from "vega-embed";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { ToolCall } from "../../multimodal-live-types";
 import searcelogo from '../../assets/images/searce-logo.png';
-import heartlogo from '../../assets/images/heart-logo.png';
+import doctorlogo from '../../assets/images/doctor-logo.png';
 
-// Existing Altair graph declaration
-const declaration: FunctionDeclaration = {
-  name: "render_altair",
-  description: "Displays an altair graph in json format.",
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      json_graph: {
-        type: SchemaType.STRING,
-        description:
-          "JSON STRING representation of the graph to render. Must be a string, not a json object",
-      },
-    },
-    required: ["json_graph"],
-  },
-};
+
 
 // Existing Epic Patient creation declaration
 const createEpicPatientDeclaration: FunctionDeclaration = {
@@ -59,7 +44,7 @@ const createEpicPatientDeclaration: FunctionDeclaration = {
 // Existing Epic Patient search declaration
 const searchEpicPatientDeclaration: FunctionDeclaration = {
   name: "search_epic_patient",
-  description: "Searches for patients in Epic systems EHR based on demographics.",
+  description: "Searches for patients in Epic systems EHR based on full name and birthdate. Save the patientId to use with other tools but do not save it out loud. If a ptient record is found,confirm the patient record is correct using the phone number and gender.",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -90,49 +75,121 @@ const searchEpicPatientDeclaration: FunctionDeclaration = {
   },
 };
 
-// Updated tool: static doctor time slots declaration (search by name)
-const doctorTimeSlotsDeclaration: FunctionDeclaration = {
-  name: "get_doctor_time_slots",
+/** DIAGNOSTIC REPORT SEARCH (Requires patientId) **/
+const searchEpicDiagnosticReportDeclaration: FunctionDeclaration = {
+  name: "search_epic_diagnostic_report",
   description:
-    "Retrieves static doctor time slots available for appointments. If a doctorName is provided, only that doctor's slots are returned; otherwise, slots for all doctors are returned.",
+    "Searches for DiagnosticReport resources in Epic for a given patient ID. Always call the get_upcoming_appointments first to get the patient ID. Sumarize the report and give a brief summary of the likely situation the patient is in",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      doctorName: {
+      patientId: {
         type: SchemaType.STRING,
-        description: "Name of the doctor (optional)",
+        description: "FHIR ID of the patient from get_upcoming_appointments",
       },
     },
-    required: [],
+    required: ["patientId"],
   },
 };
 
-const bookAppointmentDeclaration: FunctionDeclaration = {
-  name: "book_appointment",
+/** GOAL SEARCH (Requires patientId) **/
+const searchEpicGoalDeclaration: FunctionDeclaration = {
+  name: "search_epic_goal",
   description:
-    "Books an appointment for a patient with a doctor at a given day and time. Returns a success response.",
+    "Searches for Goal resources in Epic for a given patient. Always call the get_upcoming_appointments first to get the patient ID. Sumarize the Goal and give a brief summary of the likely situation the patient is in",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      doctorId: {
+      patientId: {
         type: SchemaType.STRING,
-        description: "Unique identifier for the doctor",
-      },
-      day: {
-        type: SchemaType.STRING,
-        description:
-          "Day of the week for the appointment (e.g., Mon, Tue, Wed...)",
-      },
-      time: {
-        type: SchemaType.STRING,
-        description: "Time of the appointment (e.g., 09:00)",
-      },
-      patientName: {
-        type: SchemaType.STRING,
-        description: "Name of the patient booking the appointment",
+        description: "FHIR ID of the patient from get_upcoming_appointments",
       },
     },
-    required: ["doctorId", "day", "time", "patientName"],
+    required: ["patientId"],
+  },
+};
+
+/** MEDICATION REQUEST SEARCH (Requires patientId) **/
+export const searchEpicMedicationRequestDeclaration: FunctionDeclaration = {
+  name: "search_epic_medication_request",
+  description:
+    "Searches for MedicationRequest resources (R4) in Epic for a given patient. Always call the get_upcoming_appointments first to get the patient ID. Sumarize the medication request and give a brief summary of the likely situation the patient is in",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "The FHIR ID of the patient from get_upcoming_appointments",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+/** MEDICATION READ (Requires medication ID) **/
+const readEpicMedicationDeclaration: FunctionDeclaration = {
+  name: "read_epic_medication",
+  description:
+    "Reads a specific Medication resource by its ID in Epic. You will get medication.id from searching a search_epic_medication_statement. Always call the get_upcoming_appointments first to get the patient ID. This resource is not patient-specific, but is used for detailed medication info. Sumarize the medication and give a brief summary of the likely situation the patient is in",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      medicationId: {
+        type: SchemaType.STRING,
+        description:
+          "The ID of the Medication resource (from a medication statement reference).",
+      },
+    },
+    required: ["medicationId"],
+  },
+};
+
+/** OBSERVATION (LABS) SEARCH (Requires patientId) **/
+const searchEpicObservationDeclaration: FunctionDeclaration = {
+  name: "search_epic_observation",
+  description:
+    "Searches for Observation (Labs) in Epic for a given patient. Always call the get_upcoming_appointments first to get the patient ID. Sumarize the observations and give a brief summary of the likely situation the patient is in",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "FHIR ID of the patient from get_upcoming_appointments",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+/** PROCEDURE SEARCH (Requires patientId) **/
+const searchEpicProcedureDeclaration: FunctionDeclaration = {
+  name: "search_epic_procedure",
+  description:
+    "Searches for Procedure (Orders) resources in Epic for a given patient. Always call the search_epic_patient first to get the patient ID. Sumarize the procedures and give a brief summary of the likely situation the patient is in",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      patientId: {
+        type: SchemaType.STRING,
+        description: "FHIR ID of the patient from search_epic_patient",
+      },
+    },
+    required: ["patientId"],
+  },
+};
+
+const getUpcomingAppointmentsDeclaration: FunctionDeclaration = {
+  name: "get_upcoming_appointments",
+  description: "Retrieves a static list of appointments for a physician.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      physicianName: {
+        type: SchemaType.STRING,
+        description: "Name of physician to filter on",
+      },
+    },
+    required: ["physicianName"],
   },
 };
 
@@ -152,7 +209,14 @@ function AltairComponent() {
       systemInstruction: {
         parts: [
           {
-            text: 'System Instruction: you are a friendly, conversational and helpful assistant that can help with patient care and support. Always start with an introduction and explain that you can help them schedule an appointment with a doctor. Start with checking if they are an existing patient with the hospital. Ask for first name, last name and dob to check and use search_epic_patient tool to check if they exist in the database ( only if it returns a record then confirm their identity by asking them their phone and gender) then ask them if they would like to schedule an appointment.  If they do not exist in the database, tell them that youre going to need more information to create a new patient record. For scheduling an appointment ask them if they have a preferred doctor and if they have a preferred time. If they do not have a preferred doctor, ask them if they would like to see a list of doctors. If they do not have a preferred time, ask them if they would like to see a list of times. Once they find a time and doctor send them a confirmation message and thank them for using your service.',
+            text: 'You are a helpful AI assistant that supports a PHYSICIAN. \
+                  Your role: \
+                  Start with this introduction: Hey Dr. Smith - good morning! You have a busy day ahead with upcoming appointments, and I can help you with the medical history for each patient. How can I help? \
+                  1) Provide clinical data about the patient by calling the relevant FHIR/Epic tools. \
+                  2) The user is a physician asking for info about the patient\'s labs, medication lists, goals, diagnostic reports, or scheduling follow-ups. \
+                  3) You need to call get_upcoming_appointments  tool to get the patients that the physician is seeing today. You need to call this function to rin all other tools (DiagnosticReport, Goals, Observations, etc.). Then ask him whether he would like to know information about any of them. If the doctor says yes, prompt the physician for which information he needs - lab reports, patient goals or previous diagnostic reports. Depending on what the physician responds, provide the data by calling relevant FHIR/Epic tools and summarizing the output \
+                  4) Provide concise, relevant medical summaries, based on the output of the tools. \
+                  5) If asked about a medication\'s details, use \'read_epic_medication\' with the medication ID from a medication statement.',
           },
         ],
       },
@@ -161,11 +225,15 @@ function AltairComponent() {
         { googleSearch: {} },
         {
           functionDeclarations: [
-            declaration,
             createEpicPatientDeclaration,
             searchEpicPatientDeclaration,
-            doctorTimeSlotsDeclaration, // Updated doctor time slots tool
-            bookAppointmentDeclaration,
+            searchEpicDiagnosticReportDeclaration,
+            searchEpicGoalDeclaration,
+            searchEpicMedicationRequestDeclaration,
+            readEpicMedicationDeclaration,
+            searchEpicObservationDeclaration,
+            searchEpicProcedureDeclaration,
+            getUpcomingAppointmentsDeclaration
           ],
         },
       ],
@@ -176,13 +244,13 @@ function AltairComponent() {
     const onToolCall = async (toolCall: ToolCall) => {
       console.log("got toolcall", toolCall);
 
-      // Handle Altair graph rendering
-      const altairCall = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name
-      );
-      if (altairCall) {
-        const str = (altairCall.args as any).json_graph;
-        setJSONString(str);
+      async function getEpicToken() {
+        const tokenResponse = await fetch("/getToken");
+        if (!tokenResponse.ok) {
+          throw new Error(`Token fetch error: ${await tokenResponse.text()}`);
+        }
+        const tokenData = await tokenResponse.json();
+        return tokenData.access_token;
       }
 
       const createPatientCall = toolCall.functionCalls.find(
@@ -355,172 +423,308 @@ function AltairComponent() {
         }
       }
 
-      // Handle doctor time slots request using doctorName for filtering
-      const doctorSlotCall = toolCall.functionCalls.find(
-        (fc) => fc.name === doctorTimeSlotsDeclaration.name
+      // 3) DIAGNOSTICREPORT SEARCH
+      const diagReportCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicDiagnosticReportDeclaration.name
       );
-      if (doctorSlotCall) {
-        const { doctorName } = doctorSlotCall.args as any;
+      if (diagReportCall) {
+        const { patientId } = diagReportCall.args as any;
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/DiagnosticReport?patient=${patientId}`;
 
-        // Define static time slots for two example doctors
-        const doctors = [
-          {
-            id: "doc1",
-            name: "Dr. Alice Smith",
-            timeSlots: {
-              Mon: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Tue: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Wed: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Thu: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
-              Fri: [
-                "09:00",
-                "09:30",
-                "10:00",
-                "10:30",
-                "11:00",
-                "11:30",
-                "12:00",
-              ],
+        try {
+          const token = await getEpicToken();
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
             },
+          });
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: diagReportCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: diagReportCall.id,
+              },
+            ],
+          });
+        }
+      }
+
+      // 4) GOAL SEARCH
+      const goalCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicGoalDeclaration.name
+      );
+      if (goalCall) {
+        const { patientId } = goalCall.args as any;
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Goal?patient=${patientId}`;
+        try {
+          const token = await getEpicToken();
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: goalCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: goalCall.id,
+              },
+            ],
+          });
+        }
+      }
+
+      const medRequestCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicMedicationRequestDeclaration.name
+      );
+      if (medRequestCall) {
+        const { patientId } = medRequestCall.args as any;
+        // Use R4 endpoint for medication requests
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/MedicationRequest?patient=${patientId}`;
+      
+        try {
+          const token = await getEpicToken(); // your utility to fetch /getToken
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+      
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+          console.log("MedicationRequest search status code:", resp.status);
+      
+          // Return the data
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: medRequestCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: medRequestCall.id,
+              },
+            ],
+          });
+        }
+      }
+      // 6) READ MEDICATION
+      const readMedicationCall = toolCall.functionCalls.find(
+        (fc) => fc.name === readEpicMedicationDeclaration.name
+      );
+      if (readMedicationCall) {
+        const { medicationId } = readMedicationCall.args as any;
+        // R4 for medication read
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Medication/${medicationId}`;
+
+        try {
+          const token = await getEpicToken();
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: readMedicationCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: readMedicationCall.id,
+              },
+            ],
+          });
+        }
+      }
+
+       // 7) OBSERVATION (Labs) SEARCH
+       const obsCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicObservationDeclaration.name
+      );
+      if (obsCall) {
+        const { patientId } = obsCall.args as any;
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Observation?patient=${patientId}&category=laboratory`;
+        try {
+          const token = await getEpicToken();
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: obsCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: obsCall.id,
+              },
+            ],
+          });
+        }
+      }
+
+       // 8) PROCEDURE SEARCH
+       const procedureCall = toolCall.functionCalls.find(
+        (fc) => fc.name === searchEpicProcedureDeclaration.name
+      );
+      if (procedureCall) {
+        const { patientId } = procedureCall.args as any;
+        const epicUrl = `https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Procedure?patient=${patientId}`;
+        try {
+          const token = await getEpicToken();
+          const resp = await fetch(epicUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/fhir+json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch (err) {
+            console.warn("No JSON body or parse error:", err);
+          }
+
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: resp.ok, data } },
+                id: procedureCall.id,
+              },
+            ],
+          });
+        } catch (error: any) {
+          client.sendToolResponse({
+            functionResponses: [
+              {
+                response: { output: { success: false, error: error.message } },
+                id: procedureCall.id,
+              },
+            ],
+          });
+        }
+      }
+
+      // 9) UPCOMING APPOINTMENTS
+      const upcomingApptsCall = toolCall.functionCalls.find(
+        (fc) => fc.name === getUpcomingAppointmentsDeclaration.name
+      );
+      if (upcomingApptsCall) {
+        const { physicianName } = upcomingApptsCall.args as any;
+        // Return the data as an OUTPUT, not as part of the input parameters
+        const data = [
+          {
+            patientName: "Derrick Lin",
+            fhirId: "eq081-VQEgP8drUUqCWzHfw3",
+            appointmentTime: "5:00 PM"
           },
           {
-            id: "doc2",
-            name: "Dr. Bob Johnson",
-            timeSlots: {
-              Mon: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Tue: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Wed: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Thu: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-              Fri: [
-                "13:00",
-                "13:30",
-                "14:00",
-                "14:30",
-                "15:00",
-                "15:30",
-                "16:00",
-              ],
-            },
-          },
+            patientName: "Camila Lopez",
+            fhirId: "erXuFYUfucBZaryVksYEcMg3",
+            appointmentTime: "3:00 PM"
+          }
         ];
-
-        // If a doctorName is provided, filter based on a case-insensitive check
-        const result = doctorName
-          ? doctors.filter((doc) =>
-              doc.name.toLowerCase().includes(doctorName.toLowerCase())
-            )
-          : doctors;
-
-        // Return the static doctor time slots
+        // Possibly filter by physicianName if needed
         client.sendToolResponse({
           functionResponses: [
             {
-              response: { output: { success: true, data: result } },
-              id: doctorSlotCall.id,
+              response: { output: { success: true, data } },
+              id: upcomingApptsCall.id,
             },
           ],
         });
       }
 
-      // Handle appointment booking tool call
-      const bookAppointmentCall = toolCall.functionCalls.find(
-        (fc) => fc.name === bookAppointmentDeclaration.name
-      );
-      if (bookAppointmentCall) {
-        const { doctorId, day, time, patientName } =
-          bookAppointmentCall.args as any;
-
-        // In an actual booking system, you would process the appointment here.
-        // This example simply returns a dummy success response.
-
-        const appointmentResponse = {
-          success: true,
-          appointmentId: "apt-12345", // dummy appointment ID
-          message: `Appointment booked for ${patientName} with doctor ${doctorId} on ${day} at ${time}.`,
-        };
-
-        client.sendToolResponse({
-          functionResponses: [
-            {
-              response: { output: appointmentResponse },
-              id: bookAppointmentCall.id,
-            },
-          ],
-        });
-      }
     };
 
-    client.on("toolcall", onToolCall);
-    return () => {
-      client.off("toolcall", onToolCall);
-    };
-  }, [client]);
-
-  const embedRef = useRef<HTMLDivElement>(null);
+      client.on("toolcall", onToolCall);
+      return () => {
+        client.off("toolcall", onToolCall);
+      };
+    }, [client]);
+  
+    const embedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (embedRef.current && jsonString) {
@@ -540,12 +744,12 @@ function AltairComponent() {
           />
           <div className="text-container">
             <img 
-              src={heartlogo}
-              alt="Heart"
-              className="heart-logo"
+              src={doctorlogo}
+              alt="Doctor"
+              className="doctor-logo"
             />
             <div className="logo-text">
-              Care Companion
+              Doctor Assist
             </div>
           </div>
         </div>
@@ -555,4 +759,3 @@ function AltairComponent() {
 }
 
 export const Altair = memo(AltairComponent);
-
